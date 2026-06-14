@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>港中深本科招生自评知识库</title>
+  <style>
+    :root {
+      --bg: #f6f3ed;
+      --panel: #fffaf1;
+      --ink: #1f2933;
+      --muted: #6b7280;
+      --line: #e5dccd;
+      --accent: #7f1d1d;
+      --accent-2: #0f766e;
+      --warn: #b45309;
+      --danger: #991b1b;
+      --shadow: 0 18px 48px rgba(31, 41, 51, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top left, #fff4dc 0, transparent 34rem), var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      line-height: 1.55;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    header {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 44px 22px 24px;
+    }
+
+    .eyebrow {
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 10px 0 12px;
+      max-width: 1100px;
+      font-size: clamp(34px, 5vw, 64px);
+      line-height: 0.98;
+      letter-spacing: -0.055em;
+    }
+
+    .lead {
+      max-width: 1000px;
+      margin: 0;
+      color: #4b5563;
+      font-size: 18px;
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 22px;
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 0 22px;
+      align-items: start;
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+    }
+
+    section, aside, .card {
+      background: rgba(255, 250, 241, 0.92);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+    }
+
+    aside {
+      padding: 20px;
+      max-width: none;
+    }
+    section { padding: 22px; }
+
+    .status-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      margin: 14px 0 18px;
+    }
+
+    .metric {
+      padding: 12px;
+      background: #ffffff99;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+    }
+
+    .metric b { display: block; font-size: 22px; }
+    .metric span { color: var(--muted); font-size: 12px; }
+
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+    button {
+      border: 0;
+      border-radius: 999px;
+      padding: 11px 15px;
+      background: var(--ink);
+      color: white;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button.secondary { background: #eadfce; color: var(--ink); }
+    button.danger { background: var(--danger); }
+    button:disabled { opacity: 0.55; cursor: wait; }
+
+    label {
+      display: block;
+      margin: 16px 0 6px;
+      font-weight: 800;
+      font-size: 14px;
+    }
+
+    input, textarea, select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px 13px;
+      background: #fffdfa;
+      color: var(--ink);
+      font: inherit;
+    }
+
+    textarea { min-height: 88px; resize: vertical; }
+    .hint { color: var(--muted); font-size: 12px; margin-top: 4px; }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0 14px;
+    }
+
+    .full { grid-column: 1 / -1; }
+
+    .result {
+      min-height: 420px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .empty {
+      min-height: 360px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      color: var(--muted);
+      border: 1px dashed var(--line);
+      border-radius: 20px;
+      padding: 28px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      width: fit-content;
+      padding: 7px 11px;
+      border-radius: 999px;
+      background: #fee2e2;
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .badge.ok { background: #ccfbf1; color: var(--accent-2); }
+    .badge.warn { background: #ffedd5; color: var(--warn); }
+
+    .report-block {
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: #fffdfa;
+    }
+
+    .report-block h3 { margin: 0 0 8px; }
+    .report-block p { margin: 0; color: #374151; }
+    ul { margin: 8px 0 0; padding-left: 20px; }
+
+    .source {
+      padding: 12px;
+      margin-top: 10px;
+      border-radius: 14px;
+      background: #f8f2e8;
+      border: 1px solid var(--line);
+    }
+    .source a { color: var(--accent); font-weight: 800; text-decoration: none; }
+    .source small { color: var(--muted); display: block; margin-top: 4px; }
+
+    .history-item {
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #fffdfa;
+      margin-top: 10px;
+      font-size: 14px;
+    }
+
+    .notice {
+      margin-top: 14px;
+      padding: 12px;
+      border-radius: 14px;
+      background: #fff7ed;
+      color: #9a3412;
+      border: 1px solid #fed7aa;
+      font-size: 14px;
+    }
+
+    @media (max-width: 940px) {
+      main { grid-template-columns: 1fr; }
+      aside { max-width: none; }
+    }
+    @media (max-width: 640px) {
+      .form-grid { grid-template-columns: 1fr; }
+      header { padding-top: 28px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="eyebrow">CUHK-Shenzhen Knowledge Base</div>
+    <h1>港中深本科招生自评知识库</h1>
+    <p class="lead">学生填写自己的成绩、英语、专业兴趣、预算和适应能力。系统检索本地官方资料，再用云端大模型生成建议型报告。</p>
+  </header>
+
+  <main>
+    <aside>
+      <h2>知识库状态</h2>
+      <div class="status-grid">
+        <div class="metric"><b id="documents">-</b><span>官方文档</span></div>
+        <div class="metric"><b id="chunks">-</b><span>检索片段</span></div>
+        <div class="metric"><b id="indexReady">-</b><span>索引状态</span></div>
+        <div class="metric"><b id="llmReady">-</b><span>云模型配置</span></div>
+      </div>
+      <div class="actions">
+        <button id="ingestBtn" class="secondary">采集官方资料</button>
+        <button id="rebuildBtn">重建索引</button>
+        <button id="refreshBtn" class="secondary">刷新状态</button>
+      </div>
+      <div class="notice" id="notice">第一次使用：先点“采集官方资料”，再点“重建索引”。</div>
+
+      <h2 style="margin-top:24px;">历史记录</h2>
+      <div class="actions">
+        <button id="historyBtn" class="secondary">查看历史</button>
+      </div>
+      <div id="history"></div>
+      <details style="margin-top:16px;">
+        <summary>清空历史记录</summary>
+        <p class="hint">这是删除/清空操作。页面要求你做两次确认，并输入确认句。</p>
+        <label><input id="confirmFirst" type="checkbox" style="width:auto;"> 第一次确认</label>
+        <label><input id="confirmSecond" type="checkbox" style="width:auto;"> 第二次确认</label>
+        <input id="clearPhrase" placeholder="我确认清空历史记录" />
+        <button id="clearHistoryBtn" class="danger" style="margin-top:10px;">清空</button>
+      </details>
+    </aside>
+
+    <section>
+      <h2>学生自评表</h2>
+      <form id="assessmentForm">
+        <div class="form-grid">
+          <div>
+            <label for="applicantPath">招生通道</label>
+            <select id="applicantPath" required>
+              <option value="mainland_gaokao">内地高考</option>
+              <option value="comprehensive_eval">综合评价</option>
+              <option value="hmt">港澳台</option>
+              <option value="international">国际生</option>
+            </select>
+          </div>
+          <div>
+            <label for="region">地区/省份/国家</label>
+            <input id="region" placeholder="例如：广东 / 浙江 / 香港 / 新加坡" />
+          </div>
+          <div>
+            <label for="examType">考试类型</label>
+            <input id="examType" placeholder="例如：高考 / IB / A-Level / DSE / SAT" />
+          </div>
+          <div>
+            <label for="intendedMajor">意向专业</label>
+            <input id="intendedMajor" placeholder="例如：经管 / 数据科学 / 计算机 / 医学" />
+          </div>
+          <div class="full">
+            <label for="scoreSummary">成绩/排名/等级</label>
+            <textarea id="scoreSummary" placeholder="写清楚总分、排名、预估分、一分一段位置、IB/A-Level/SAT/ACT/AP 等成绩。"></textarea>
+          </div>
+          <div>
+            <label for="englishLevel">英语能力</label>
+            <textarea id="englishLevel" placeholder="例如：高考英语 135；IELTS 7.0；TOEFL 100；DSE English 5。"></textarea>
+          </div>
+          <div>
+            <label for="budget">预算情况</label>
+            <textarea id="budget" placeholder="例如：家庭可承担每年学费住宿费；是否需要奖学金。"></textarea>
+          </div>
+          <div>
+            <label for="competitionsProjects">竞赛/项目/活动</label>
+            <textarea id="competitionsProjects" placeholder="例如：数学竞赛、科研、志愿服务、社团、商业项目。"></textarea>
+          </div>
+          <div>
+            <label for="adaptability">适应能力</label>
+            <textarea id="adaptability" placeholder="例如：能否接受英文教学、快节奏学习、离家生活、团队合作。"></textarea>
+          </div>
+          <div class="full">
+            <label for="constraints">目标约束/担忧</label>
+            <textarea id="constraints" placeholder="例如：必须留在大湾区；担心英文授课；担心费用；想转专业。"></textarea>
+          </div>
+        </div>
+        <label><input id="saveHistory" type="checkbox" checked style="width:auto;"> 本地保存本次历史记录</label>
+        <div class="actions" style="margin-top:18px;">
+          <button id="assessBtn" type="submit">生成自评报告</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="result" id="resultPanel">
+      <div class="empty">
+        <div>
+          <h2>等待生成报告</h2>
+          <p>报告会包含结论、依据、风险、费用、适应性、下一步行动和官方来源。</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    function setNotice(text, type = "normal") {
+      const node = $("notice");
+      node.textContent = text;
+      node.style.borderColor = type === "error" ? "#fecaca" : "#fed7aa";
+      node.style.background = type === "error" ? "#fef2f2" : "#fff7ed";
+      node.style.color = type === "error" ? "#991b1b" : "#9a3412";
+    }
+
+    async function api(path, options = {}) {
+      const response = await fetch(path, {
+        headers: { "Content-Type": "application/json" },
+        ...options,
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.detail || `请求失败：${response.status}`);
+      }
+      return data;
+    }
+
+    async function refreshStatus() {
+      const data = await api("/api/status");
+      $("documents").textContent = data.documents;
+      $("chunks").textContent = data.chunks;
+      $("indexReady").textContent = data.index_ready ? "Ready" : "No";
+      $("llmReady").textContent = data.llm_configured ? "Ready" : "No";
+      return data;
+    }
+
+    async function runButton(button, work) {
+      const original = button.textContent;
+      button.disabled = true;
+      button.textContent = "处理中...";
+      try {
+        await work();
+      } catch (error) {
+        setNotice(error.message, "error");
+      } finally {
+        button.disabled = false;
+        button.textContent = original;
+      }
+    }
+
+    $("ingestBtn").addEventListener("click", () => runButton($("ingestBtn"), async () => {
+      const data = await api("/api/ingest", { method: "POST" });
+      setNotice(`已采集 ${data.ingested} 个官方页面。下一步请重建索引。`);
+      await refreshStatus();
+    }));
+
+    $("rebuildBtn").addEventListener("click", () => runButton($("rebuildBtn"), async () => {
+      const data = await api("/api/rebuild", { method: "POST" });
+      setNotice(`索引已重建：${data.documents} 个文档，${data.chunks} 个片段。`);
+      await refreshStatus();
+    }));
+
+    $("refreshBtn").addEventListener("click", () => runButton($("refreshBtn"), async () => {
+      await refreshStatus();
+      setNotice("状态已刷新。");
+    }));
+
+    $("assessmentForm").addEventListener("submit", (event) => {
+      event.preventDefault();
+      runButton($("assessBtn"), async () => {
+        const payload = {
+          profile: {
+            applicant_path: $("applicantPath").value,
+            region: $("region").value,
+            exam_type: $("examType").value,
+            score_summary: $("scoreSummary").value,
+            english_level: $("englishLevel").value,
+            intended_major: $("intendedMajor").value,
+            competitions_projects: $("competitionsProjects").value,
+            budget: $("budget").value,
+            adaptability: $("adaptability").value,
+            constraints: $("constraints").value,
+          },
+          save_history: $("saveHistory").checked,
+        };
+        const data = await api("/api/assess", { method: "POST", body: JSON.stringify(payload) });
+        renderReport(data);
+        setNotice(data.status === "insufficient_data" ? "信息不足，请补充报告里列出的字段。" : "报告已生成。");
+      });
+    });
+
+    function renderReport(data) {
+      const report = data.report;
+      const badgeClass = report.fit_level === "高度匹配" || report.fit_level === "有条件匹配" ? "ok" :
+        report.fit_level === "信息不足" || report.fit_level === "风险较高" ? "warn" : "";
+      $("resultPanel").innerHTML = `
+        <div class="report-block">
+          <span class="badge ${badgeClass}">${escapeHtml(report.fit_level)}</span>
+          <h2>${escapeHtml(report.conclusion)}</h2>
+          ${data.missing_fields.length ? `<p><b>需要补充：</b>${data.missing_fields.map(escapeHtml).join("、")}</p>` : ""}
+          <p class="hint">${escapeHtml(report.disclaimer)}</p>
+        </div>
+        ${block("关键依据", list(report.key_evidence))}
+        ${block("学术匹配", paragraph(report.academic_match))}
+        ${block("专业匹配", paragraph(report.major_match))}
+        ${block("语言和适应性", paragraph(report.language_and_adaptability))}
+        ${block("费用与奖学金风险", paragraph(report.cost_and_scholarship_risk))}
+        ${block("风险点", list(report.risks))}
+        ${block("下一步行动", list(report.action_plan))}
+        ${block("官方来源", sources(report.sources))}
+      `;
+    }
+
+    function block(title, body) {
+      return `<div class="report-block"><h3>${escapeHtml(title)}</h3>${body || "<p class='hint'>无</p>"}</div>`;
+    }
+    function paragraph(text) {
+      return text ? `<p>${escapeHtml(text)}</p>` : "";
+    }
+    function list(items) {
+      return items && items.length ? `<ul>${items.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : "";
+    }
+    function sources(items) {
+      if (!items || !items.length) return "";
+      return items.map(item => `
+        <div class="source">
+          <a href="${escapeAttr(item.url)}" target="_blank" rel="noreferrer">${escapeHtml(item.title)}</a>
+          <small>${escapeHtml(item.category)} · score ${Number(item.score).toFixed(4)}</small>
+          <p>${escapeHtml(item.text)}</p>
+        </div>
+      `).join("");
+    }
+
+    $("historyBtn").addEventListener("click", () => runButton($("historyBtn"), async () => {
+      const data = await api("/api/history");
+      $("history").innerHTML = data.items.length ? data.items.map(item => `
+        <div class="history-item">
+          <b>${escapeHtml(item.created_at || "")}</b><br>
+          ${escapeHtml(item.profile?.region || "")} · ${escapeHtml(item.profile?.intended_major || "")}<br>
+          <span class="hint">${escapeHtml(item.response?.report?.fit_level || "")}</span>
+        </div>
+      `).join("") : "<p class='hint'>暂无历史记录。</p>";
+    }));
+
+    $("clearHistoryBtn").addEventListener("click", () => runButton($("clearHistoryBtn"), async () => {
+      const data = await api("/api/history/clear", {
+        method: "POST",
+        body: JSON.stringify({
+          confirm_first: $("confirmFirst").checked,
+          confirm_second: $("confirmSecond").checked,
+          phrase: $("clearPhrase").value,
+        }),
+      });
+      setNotice(data.message, data.status === "cleared" ? "normal" : "error");
+      $("history").innerHTML = "";
+    }));
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, char => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
+      }[char]));
+    }
+    function escapeAttr(value) {
+      return escapeHtml(value).replace(/`/g, "&#096;");
+    }
+
+    refreshStatus().catch(error => setNotice(error.message, "error"));
+  </script>
+</body>
+</html>

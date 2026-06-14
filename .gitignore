@@ -1,0 +1,15 @@
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+data/index/*
+!data/index/.gitkeep
+data/history/*
+!data/history/.gitkeep
+knowledge_base/official/*
+!knowledge_base/official/.gitkeep
+
+# OS / runtime
+.DS_Store
+work/*
+outputs/*

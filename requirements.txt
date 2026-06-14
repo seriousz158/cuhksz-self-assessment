@@ -1,0 +1,8 @@
+beautifulsoup4
+fastapi
+jieba
+numpy
+openai
+pydantic
+rank_bm25
+uvicorn
