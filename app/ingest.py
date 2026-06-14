@@ -124,21 +124,32 @@ def _front_matter(source: OfficialSource, markdown: str) -> str:
 def ingest_sources(
     sources: Iterable[OfficialSource] = OFFICIAL_SOURCES,
     output_dir: Path = KNOWLEDGE_DIR,
-) -> list[dict[str, str]]:
+) -> dict[str, object]:
     output_dir.mkdir(parents=True, exist_ok=True)
     results: list[dict[str, str]] = []
+    failures: list[dict[str, str]] = []
 
     for source in sources:
-        raw_html = fetch_html(source.url)
-        markdown = html_to_markdown(raw_html, source)
-        output_path = output_dir / f"{source.source_id}.md"
-        output_path.write_text(_front_matter(source, markdown) + markdown, encoding="utf-8")
-        results.append(
-            {
-                "source_id": source.source_id,
-                "title": source.title,
-                "url": source.url,
-                "path": str(output_path),
-            }
-        )
-    return results
+        try:
+            raw_html = fetch_html(source.url)
+            markdown = html_to_markdown(raw_html, source)
+            output_path = output_dir / f"{source.source_id}.md"
+            output_path.write_text(_front_matter(source, markdown) + markdown, encoding="utf-8")
+            results.append(
+                {
+                    "source_id": source.source_id,
+                    "title": source.title,
+                    "url": source.url,
+                    "path": str(output_path),
+                }
+            )
+        except Exception as exc:
+            failures.append(
+                {
+                    "source_id": source.source_id,
+                    "title": source.title,
+                    "url": source.url,
+                    "error": str(exc),
+                }
+            )
+    return {"ingested": results, "failed": failures}

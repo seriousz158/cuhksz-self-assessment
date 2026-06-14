@@ -11,8 +11,8 @@ from app.ingest import ingest_sources
 
 
 def main() -> None:
-    results = ingest_sources()
-    print(json.dumps({"ingested": len(results), "sources": results}, ensure_ascii=False, indent=2))
+    result = ingest_sources()
+    print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

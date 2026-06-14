@@ -381,7 +381,14 @@
 
     $("ingestBtn").addEventListener("click", () => runButton($("ingestBtn"), async () => {
       const data = await api("/api/ingest", { method: "POST" });
-      setNotice(`已采集 ${data.ingested} 个官方页面。下一步请重建索引。`);
+      let msg = `已采集 ${data.ingested} 个官方页面`;
+      if (data.failed > 0) {
+        const names = data.failures.map(f => `「${f.title}」(${escapeHtml(f.error)})`).join("；");
+        msg += `，${data.failed} 个失败：${names}`;
+      }
+      msg += "。";
+      if (data.ingested > 0) msg += "下一步请重建索引。";
+      setNotice(msg, data.failed > 0 ? "error" : "normal");
       await refreshStatus();
     }));
 

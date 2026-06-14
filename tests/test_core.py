@@ -7,7 +7,7 @@ import numpy as np
 
 from app.assessor import normalize_report_data, validate_profile
 from app.documents import Chunk, build_chunks, parse_front_matter, split_text
-from app.ingest import html_to_markdown
+from app.ingest import html_to_markdown, ingest_sources
 from app.models import ApplicantPath, ApplicantProfile, AssessRequest, AssessmentReport, FitLevel
 from app.retrieval import HybridRetriever, VectorIndex, reciprocal_rank_fusion, result_to_source
 from app.sources import OfficialSource
@@ -99,6 +99,51 @@ class RetrievalTests(unittest.TestCase):
         source = result_to_source(results[0])
         self.assertIn("title", source)
         self.assertIn("text", source)
+
+
+class IngestFaultToleranceTests(unittest.TestCase):
+    def make_source(self, source_id: str, url: str = "https://example.com") -> OfficialSource:
+        return OfficialSource(source_id, "Title " + source_id, url, "测试", "all")
+
+    def test_continues_after_failure(self) -> None:
+        """Even when one source fails, subsequent sources are still fetched."""
+        sources = [
+            self.make_source("bad", "https://fail.example.com"),
+            self.make_source("good", "https://example.com"),
+        ]
+        call_order: list[str] = []
+
+        def fake_fetch(url: str, timeout: int = 30) -> str:
+            call_order.append(url)
+            if "fail" in url:
+                raise RuntimeError("模拟网络错误")
+            return "<html><body><h1>Good</h1><p>Content.</p></body></html>"
+
+        with patch("app.ingest.fetch_html", side_effect=fake_fetch):
+            result = ingest_sources(sources)
+
+        self.assertEqual(len(result["ingested"]), 1)
+        self.assertEqual(result["ingested"][0]["source_id"], "good")
+        self.assertEqual(len(result["failed"]), 1)
+        self.assertEqual(result["failed"][0]["source_id"], "bad")
+        self.assertIn("模拟网络错误", result["failed"][0]["error"])
+        self.assertEqual(call_order, ["https://fail.example.com", "https://example.com"])
+
+    def test_all_fail_returns_empty_results(self) -> None:
+        """When every source fails, ingested is empty but no exception is raised."""
+        sources = [
+            self.make_source("a"),
+            self.make_source("b"),
+        ]
+
+        def fake_fetch(url: str, timeout: int = 30) -> str:
+            raise RuntimeError("网络不可用")
+
+        with patch("app.ingest.fetch_html", side_effect=fake_fetch):
+            result = ingest_sources(sources)
+
+        self.assertEqual(len(result["ingested"]), 0)
+        self.assertEqual(len(result["failed"]), 2)
 
 
 class AssessmentTests(unittest.TestCase):

@@ -78,11 +78,15 @@ def status() -> StatusResponse:
 
 @app.post("/api/ingest")
 def ingest() -> dict[str, object]:
-    try:
-        results = ingest_sources()
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-    return {"ingested": len(results), "sources": results}
+    result = ingest_sources()
+    ingested = result["ingested"]
+    failed = result["failed"]
+    return {
+        "ingested": len(ingested),
+        "failed": len(failed),
+        "sources": ingested,
+        "failures": failed,
+    }
 
 
 @app.post("/api/rebuild")
