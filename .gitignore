@@ -13,3 +13,4 @@ knowledge_base/official/*
 .DS_Store
 work/*
 outputs/*
+.playwright-cli/

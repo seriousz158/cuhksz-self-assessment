@@ -4,5 +4,6 @@ jieba
 numpy
 openai
 pydantic
+playwright
 rank_bm25
 uvicorn

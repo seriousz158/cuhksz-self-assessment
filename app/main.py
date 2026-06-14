@@ -10,6 +10,7 @@ from app.assessor import (
     call_llm_for_report,
     history_record,
     insufficient_response,
+    soft_missing_labels,
     validate_profile,
 )
 from app.config import BASE_DIR, get_settings
@@ -117,16 +118,17 @@ def assess(request: AssessRequest) -> AssessResponse:
 
     raw_results = retriever.search(query, query_vector, top_k=settings.retrieval_top_k)
     sources = [result_to_source(result) for result in raw_results]
-    missing = validate_profile(profile)
+    hard_missing = validate_profile(profile)
+    soft_missing = soft_missing_labels(profile)
 
-    if missing:
-        response = insufficient_response(profile, missing, sources)
+    if hard_missing:
+        response = insufficient_response(profile, hard_missing, sources)
     else:
         try:
             report = call_llm_for_report(profile, sources, settings)
         except Exception as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        response = AssessResponse(status="ok", report=report, missing_fields=[])
+        response = AssessResponse(status="ok", report=report, missing_fields=soft_missing)
 
     if request.save_history:
         append_history(history_record(profile, response))

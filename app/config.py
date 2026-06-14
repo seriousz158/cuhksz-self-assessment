@@ -54,6 +54,6 @@ def get_settings() -> Settings:
         embedding_model=os.getenv("EMBEDDING_MODEL", "bge-m3:latest"),
         chunk_size=int(os.getenv("CHUNK_SIZE", "900")),
         chunk_overlap=int(os.getenv("CHUNK_OVERLAP", "160")),
-        retrieval_top_k=int(os.getenv("RETRIEVAL_TOP_K", "10")),
+        retrieval_top_k=int(os.getenv("RETRIEVAL_TOP_K", "16")),
         request_timeout=int(os.getenv("REQUEST_TIMEOUT", "120")),
     )

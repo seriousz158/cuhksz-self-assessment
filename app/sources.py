@@ -10,6 +10,7 @@ class OfficialSource:
     url: str
     category: str
     applicant_path: str
+    js_render: bool = False  # True → use Playwright browser fetch for SPA pages
 
 
 OFFICIAL_SOURCES: list[OfficialSource] = [
@@ -26,6 +27,7 @@ OFFICIAL_SOURCES: list[OfficialSource] = [
         "https://admissions.cuhk.edu.cn/page/834",
         "综合评价",
         "comprehensive_eval",
+        js_render=True,
     ),
     OfficialSource(
         "comprehensive_eval_zhejiang_2026",
@@ -75,6 +77,7 @@ OFFICIAL_SOURCES: list[OfficialSource] = [
         "https://admissions.cuhk.edu.cn/taxonomy/term/166",
         "港澳台招生",
         "hmt",
+        js_render=True,
     ),
     OfficialSource(
         "hmt_joint_exam_2026",
@@ -145,6 +148,7 @@ OFFICIAL_SOURCES: list[OfficialSource] = [
         "https://admissions.cuhk.edu.cn/programmes",
         "专业介绍",
         "all",
+        js_render=True,
     ),
     OfficialSource(
         "tuition_and_accommodation",
@@ -152,6 +156,7 @@ OFFICIAL_SOURCES: list[OfficialSource] = [
         "https://admissions.cuhk.edu.cn/page/798",
         "费用",
         "all",
+        js_render=True,
     ),
     OfficialSource(
         "internationalized_teaching",
@@ -159,5 +164,6 @@ OFFICIAL_SOURCES: list[OfficialSource] = [
         "https://admissions.cuhk.edu.cn/page/67",
         "培养特色",
         "all",
+        js_render=True,
     ),
 ]

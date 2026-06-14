@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import numpy as np
 
-from app.assessor import normalize_report_data, validate_profile
+from app.assessor import extract_score_context, normalize_report_data, soft_missing_labels, validate_profile
 from app.documents import Chunk, build_chunks, parse_front_matter, split_text
 from app.ingest import html_to_markdown, ingest_sources
 from app.models import ApplicantPath, ApplicantProfile, AssessRequest, AssessmentReport, FitLevel
@@ -163,9 +163,31 @@ class AssessmentTests(unittest.TestCase):
 
     def test_validate_profile_finds_missing_fields(self) -> None:
         profile = ApplicantProfile(applicant_path=ApplicantPath.international)
-        missing = validate_profile(profile)
-        self.assertIn("成绩/排名/等级", missing)
-        self.assertIn("英语能力", missing)
+        hard_missing = validate_profile(profile)
+        # Hard-required fields: region, exam_type, score_summary, intended_major
+        self.assertIn("成绩/排名/等级", hard_missing)
+        self.assertIn("意向专业", hard_missing)
+        self.assertIn("地区/省份/国家", hard_missing)
+        self.assertIn("考试类型", hard_missing)
+        self.assertEqual(len(hard_missing), 4)  # Only hard-required, no soft fields
+
+    def test_soft_missing_excludes_hard_required_fields(self) -> None:
+        profile = ApplicantProfile(applicant_path=ApplicantPath.international)
+        soft = soft_missing_labels(profile)
+        # english_level, budget, adaptability are soft — missing here
+        self.assertIn("英语能力", soft)
+        self.assertIn("预算情况", soft)
+        self.assertIn("适应能力", soft)
+        # But region, exam_type etc. are hard — not reported here
+        self.assertNotIn("地区/省份/国家", soft)
+        self.assertNotIn("成绩/排名/等级", soft)
+
+    def test_full_profile_passes_validation(self) -> None:
+        profile = self.complete_profile()
+        hard_missing = validate_profile(profile)
+        self.assertEqual(len(hard_missing), 0)
+        soft = soft_missing_labels(profile)
+        self.assertEqual(len(soft), 0)
 
     def test_normalize_report_data_guards_bad_level(self) -> None:
         data = normalize_report_data({"fit_level": "录取概率90%", "conclusion": "测试"})
@@ -204,6 +226,67 @@ class AssessmentTests(unittest.TestCase):
         self.assertEqual(response.status, "ok")
         self.assertEqual(response.report.fit_level, FitLevel.conditional_fit)
         append_history.assert_called_once()
+
+    # ── extract_score_context tests ──
+
+    def test_extract_score_context_finds_tianjin_line(self) -> None:
+        """When sources contain Tianjin's 2025 score line, it should be extracted."""
+        sources = [
+            {
+                "title": "录取分数线",
+                "url": "https://example.com",
+                "text": "| 天津 | 综合改革 | 652 | - |",
+            }
+        ]
+        result = extract_score_context(sources, region="天津")
+        self.assertIn("天津", result)
+        self.assertIn("652", result)
+
+    def test_extract_score_context_finds_national_stats(self) -> None:
+        """National statistics should be extracted when available."""
+        sources = [
+            {
+                "title": "统计数据",
+                "url": "https://example.com",
+                "text": (
+                    "物理类/选考最低录取分稳居各省市考生前 2% 以内。"
+                    "录取学生高考英语平均分高达 136 分。"
+                ),
+            }
+        ]
+        result = extract_score_context(sources, region="西藏")
+        self.assertIn("前2%", result)
+        self.assertIn("136", result)
+
+    def test_extract_score_context_returns_fallback_when_no_province_found(self) -> None:
+        """When no province match exists, the fallback message should appear."""
+        sources = [
+            {
+                "title": "其他内容",
+                "url": "https://example.com",
+                "text": "This text contains no Chinese province score lines at all.",
+            }
+        ]
+        result = extract_score_context(sources, region="火星")
+        self.assertIn("未在检索片段中找到", result)
+
+    def test_extract_score_context_includes_neighbour_provinces(self) -> None:
+        """Neighbour province score lines should appear as cross-reference."""
+        sources = [
+            {
+                "title": "分数线",
+                "url": "https://example.com",
+                "text": (
+                    "| 天津 | 综合改革 | 652 | - |\n"
+                    "| 北京 | 综合改革（不限） | 644 | 3976 |\n"
+                    "| 河北 | 物理类 | 639 | - |\n"
+                ),
+            }
+        ]
+        result = extract_score_context(sources, region="天津")
+        self.assertIn("天津", result)
+        self.assertIn("652", result)
+        self.assertIn("毗邻/同类省份参考", result)
 
 
 if __name__ == "__main__":

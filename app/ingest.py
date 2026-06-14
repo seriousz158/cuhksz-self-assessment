@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import html
 import json
+import logging
 import re
 import subprocess
 import urllib.error
@@ -16,6 +17,7 @@ from bs4 import BeautifulSoup
 from app.config import KNOWLEDGE_DIR
 from app.sources import OFFICIAL_SOURCES, OfficialSource
 
+logger = logging.getLogger(__name__)
 
 USER_AGENT = "Mozilla/5.0 (compatible; CUHKSZ-KB/1.0)"
 
@@ -40,6 +42,40 @@ def fetch_html(url: str, timeout: int = 30) -> str:
         return completed.stdout
 
 
+def fetch_html_with_browser(url: str, timeout: int = 30) -> str:
+    """Fetch HTML from a JS-rendered page using Playwright headless Chromium.
+
+    Falls back to plain urllib/curl if Playwright is not installed or fails.
+    """
+    try:
+        from playwright.sync_api import sync_playwright, Error as PlaywrightError
+    except ImportError:
+        logger.warning("Playwright not installed — falling back to static fetch for %s", url)
+        return fetch_html(url, timeout)
+
+    try:
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(headless=True)
+            context = browser.new_context(
+                user_agent=USER_AGENT,
+                viewport={"width": 1280, "height": 720},
+            )
+            page = context.new_page()
+            try:
+                page.goto(url, wait_until="networkidle", timeout=timeout * 1000)
+                # Extra wait for dynamic content (SPA hydration, API calls)
+                page.wait_for_timeout(2000)
+                raw = page.content()
+            finally:
+                context.close()
+                browser.close()
+        logger.info("Browser fetched %s (%d chars)", url, len(raw))
+        return raw
+    except (PlaywrightError, Exception) as exc:
+        logger.warning("Browser fetch failed for %s: %s — falling back to static fetch", url, exc)
+        return fetch_html(url, timeout)
+
+
 def _clean_text(value: str) -> str:
     value = html.unescape(value)
     value = re.sub(r"\u00a0", " ", value)
@@ -50,7 +86,8 @@ def _clean_text(value: str) -> str:
 
 def html_to_markdown(raw_html: str, source: OfficialSource) -> str:
     soup = BeautifulSoup(raw_html, "html.parser")
-    for tag in soup(["script", "style", "noscript", "svg", "canvas"]):
+    # Remove scripts, styles, and navigation/footer noise
+    for tag in soup(["script", "style", "noscript", "svg", "canvas", "nav", "header", "footer"]):
         tag.decompose()
 
     title = _clean_text(
@@ -70,7 +107,9 @@ def html_to_markdown(raw_html: str, source: OfficialSource) -> str:
     lines: list[str] = [f"# {title}", ""]
     seen_blocks: set[str] = set()
 
-    for element in content_root.find_all(["h1", "h2", "h3", "h4", "p", "li", "tr"], recursive=True):
+    for element in content_root.find_all(
+        ["h1", "h2", "h3", "h4", "p", "li", "tr", "a"], recursive=True
+    ):
         text = _clean_text(element.get_text(" ", strip=True))
         if not text or len(text) < 2:
             continue
@@ -84,6 +123,24 @@ def html_to_markdown(raw_html: str, source: OfficialSource) -> str:
             prefix = "###"
         elif element.name == "li":
             prefix = "-"
+        elif element.name == "a":
+            # Standalone content link — render as markdown link
+            href = element.get("href", "")
+            url = None
+            if isinstance(href, str) and href.strip():
+                from urllib.parse import urljoin
+                url = urljoin(source.url, href.strip())
+            if url:
+                # Exclude javascript: links and anchor-only links
+                if not href.strip().startswith(("javascript:", "#")):
+                    prefix = f"- [{text}]({url})"
+                else:
+                    prefix = "-"
+                    # only keep if text looks meaningful (not nav crumbs)
+                    if len(text) < 3:
+                        continue
+            else:
+                prefix = "-"
         elif element.name == "tr":
             cells = [_clean_text(cell.get_text(" ", strip=True)) for cell in element.find_all(["th", "td"])]
             cells = [cell for cell in cells if cell]
@@ -131,7 +188,10 @@ def ingest_sources(
 
     for source in sources:
         try:
-            raw_html = fetch_html(source.url)
+            if source.js_render:
+                raw_html = fetch_html_with_browser(source.url)
+            else:
+                raw_html = fetch_html(source.url)
             markdown = html_to_markdown(raw_html, source)
             output_path = output_dir / f"{source.source_id}.md"
             output_path.write_text(_front_matter(source, markdown) + markdown, encoding="utf-8")
