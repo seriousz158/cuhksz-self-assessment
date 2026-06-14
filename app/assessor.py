@@ -155,7 +155,33 @@ def extract_score_context(sources: list[dict[str, Any]], region: str) -> str:
     if province_lines:
         parts.append("**该省已知录取数据**：\n" + "\n".join(province_lines))
     else:
-        parts.append(f"**该省已知录取数据**：未在检索片段中找到 {region} 的明确分数线。")
+        # Build a richer fallback when no province-specific line is found
+        fallback_lines = [
+            f"**该省已知录取数据**：未在官方和第三方资料中找到 {region} 的明确分省分数线。",
+            "",
+            "⚠️ 重要：这不代表无法评估。请使用以下方法定位学生竞争力：",
+        ]
+        if national_stats:
+            fallback_lines.append(
+                "- **全国百分位参照**：港中深在全国物理类/选考最低录取分稳居各省市考生**前 2%**，"
+                "历史类稳居**前 1%**。如果学生在所在省份的高考排名/分数处于前 2%（物理类）"
+                "或前 1%（历史类），则具备高度竞争力。"
+            )
+            fallback_lines.append(
+                "- **全国分数区间参照**：2025 年全国最低分区间约为 603–666 分。"
+                "不同省份因高考难度和分数线差异，具体分数会有波动，"
+                "但考生在本省的百分位排名是稳定的参照。"
+            )
+        if english_stats:
+            fallback_lines.append(
+                "- **英语能力参照**：录取学生高考英语平均分高达 **136** 分。"
+                "即使缺乏省份分数线，英语成绩仍是重要参考维度。"
+            )
+        if neighbour_lines:
+            fallback_lines.append(
+                "- **毗邻省份数据**（可用于大致参照，注意省份间高考难度和分数线差异）："
+            )
+        parts.append("\n".join(fallback_lines))
 
     if national_stats:
         parts.append("**全国统计数据（可用于定位参考）**：\n" + "\n".join(national_stats))

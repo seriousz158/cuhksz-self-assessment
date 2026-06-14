@@ -268,7 +268,7 @@ class AssessmentTests(unittest.TestCase):
             }
         ]
         result = extract_score_context(sources, region="火星")
-        self.assertIn("未在检索片段中找到", result)
+        self.assertIn("未在官方和第三方资料中找到", result)
 
     def test_extract_score_context_includes_neighbour_provinces(self) -> None:
         """Neighbour province score lines should appear as cross-reference."""
