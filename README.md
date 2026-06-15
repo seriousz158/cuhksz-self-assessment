@@ -37,6 +37,7 @@ CUHK-Shenzhen Undergraduate Self-Assessment Knowledge Base
 - **SPA 浏览器抓取**：Playwright 无头 Chromium 渲染 JS 页面，自动降级到 urllib
 - **智能字段校验**：硬必填（地区/考试/成绩/专业）缺则拦截；软选填（英语/预算/适应力）缺则提示但不阻断
 - **分数上下文预提取**：检索后自动提取省份分数线、全国统计数据、邻省参照，注入 LLM prompt
+- **分数/位次同口径对比**：自动解析学生成绩（识别分数 / 位次 / 百分位 / 非高考体系 IB·A-Level·SAT·DSE），与该省录取线同口径对比（位次对位次、分数对分数）；某一口径缺失时用录取线自带的（分数, 位次）配对作锚点定性推断，绝不把位次和分数混比
 - 双重检索：向量搜索（理解语义）+ BM25 关键词搜索 + RRF 融合排序
 - 本地向量索引保存到 `data/index/`
 - 自评历史默认保存到 `data/history/self_assessments.jsonl`
@@ -148,7 +149,7 @@ app/
   documents.py     Markdown loading and chunking
   embeddings.py    Ollama embedding call
   retrieval.py     Vector search + BM25 + RRF fusion（top_k=16）
-  assessor.py      Profile validation（hard/soft split）+ score context extraction + LLM report
+  assessor.py      Profile validation（hard/soft split）+ 学生成绩解析（分数/位次）+ score context extraction + LLM report
   history.py       Local JSONL history
   sources.py       Official source URL registry（含 js_render 标记）
   config.py        Settings from .env
@@ -161,7 +162,7 @@ scripts/
   scrape_score_lines.py       高考录取分数线采集工具（种子数据 + Playwright + 解析）
   rebuild_index.py            重建本地搜索索引
 tests/
-  test_core.py     24 个单元与集成测试（不含真实 Ollama/LLM 调用）
+  test_core.py     28 个单元与集成测试（不含真实 Ollama/LLM 调用）
 ```
 
 ## How It Works
@@ -171,7 +172,7 @@ tests/
    - SPA 页面（JS 渲染）用 Playwright 无头 Chromium 抓取，失败自动降级
    - HTML → Markdown：自动去除导航/脚本/样式，保留表格和超链接
 2. **建索引**：`rebuild_index.py` 把 Markdown 切成 900 字块 → 用 `bge-m3` 转向量 → 存为 `vectors.npy` + `chunks.json`
-3. **评估流程**：学生填表 → 硬必填校验 → 检索 16 篇相关片段 → 提取分数上下文 → 发送给云端 LLM → 输出报告
+3. **评估流程**：学生填表 → 硬必填校验 → 解析学生成绩（分数/位次）→ 检索 16 篇相关片段 → 提取分数上下文（同口径标注）→ 发送给云端 LLM → 输出报告
 
 ## Tests
 
