@@ -112,11 +112,26 @@ def extract_score_context(sources: list[dict[str, Any]], region: str) -> str:
         r"^\s*\|?\s*(" + re.escape(region) + r")\s*\|[^|]*\|?\s*([\d]+)\s*\|?\s*([\d]+|-)\s*\|?",
         re.MULTILINE,
     )
+    seen_province_lines: set[str] = set()
     for match in province_pattern.finditer(combined):
         score = match.group(2)
         rank = match.group(3)
-        rank_str = f"，位次 {rank}" if rank and rank != "-" else "（位次未公布）"
-        province_lines.append(f"- {match.group(1)}：最低录取分 **{score}**{rank_str}")
+        if rank and rank != "-":
+            line = (
+                f"- {match.group(1)}：分数线 **{score}** ｜ 位次 **{rank}**"
+                "（两口径齐全，请与学生同口径数字对比）"
+            )
+        else:
+            line = (
+                f"- {match.group(1)}：分数线 **{score}** ｜ 位次 未公布"
+                "（仅分数口径；学生若只给位次，请用该行分数线作锚点定性参考并标注不确定性）"
+            )
+        # The score table straddles chunk boundaries, so the same row often
+        # appears in several retrieved chunks — collapse exact duplicates.
+        if line in seen_province_lines:
+            continue
+        seen_province_lines.add(line)
+        province_lines.append(line)
 
     # ── 2. National-level summary statistics ──
     for pattern, label in [
@@ -194,6 +209,102 @@ def extract_score_context(sources: list[dict[str, Any]], region: str) -> str:
         return "（未从资料中提取到可量化的分数上下文，请完全依赖下方的原始资料片段。）"
 
     return "\n\n".join(parts)
+
+
+# ── Student-input parsing ────────────────────────────────────────────────
+# The student's `score_summary` is free text. A gaokao score (分数) and a
+# provincial rank (位次) are NOT comparable, so we disambiguate the unit
+# deterministically before the LLM sees it, letting the prompt instruct a
+# like-for-like comparison (rank vs rank, score vs score).
+
+_RANK_KEYWORDS = r"(?:全省|省排名|省排|排名|位次|名次)"
+_SCORE_KEYWORDS = r"(?:总分|实考分|裸分|高考分|考分|分数|成绩)"
+
+
+def parse_student_score(score_summary: str, exam_type: str = "") -> dict[str, Any]:
+    """Parse the free-text score summary into structured {score, rank, ...}.
+
+    Returns a dict with the unit of each number made explicit, so the LLM
+    prompt can compare like-for-like instead of mixing a rank against a score.
+    Pure regex — no LLM arithmetic, no 一分一段表 lookup.
+    """
+    text = (score_summary or "").strip()
+    blob = f"{exam_type} {text}".upper()
+
+    # ── exam kind (default gaokao; override when a foreign exam is named) ──
+    exam_kind = "gaokao"
+    for kind, pat in [
+        ("ib", r"\bIB\b"),
+        ("alevel", r"A[-\s]?LEVEL"),
+        ("sat", r"\bSAT\b"),
+        ("act", r"\bACT\b"),
+        ("ap", r"\bAP\b"),
+        ("dse", r"(?:HK)?DSE"),
+    ]:
+        if re.search(pat, blob):
+            exam_kind = kind
+            break
+
+    is_estimate = bool(re.search(r"预估|预测|估分|大概|大约", text))
+
+    # ── percentile (前 N%) ──
+    percentile: str | None = None
+    pm = re.search(r"前\s*(\d+(?:\.\d+)?)\s*[%％]", text)
+    if pm:
+        percentile = f"前{pm.group(1)}%"
+
+    # ── rank: a 3–6 digit number attached to a rank keyword ──
+    rank: int | None = None
+    rank_span: tuple[int, int] | None = None
+    rm = re.search(_RANK_KEYWORDS + r"\D{0,4}(\d{3,6})", text)
+    if rm:
+        val = int(rm.group(1))
+        if 1 <= val <= 2_000_000:
+            rank = val
+            rank_span = rm.span()
+
+    def _claimed_by_rank(start: int) -> bool:
+        """True if the digit run at `start` is part of the matched rank phrase."""
+        if rank_span and rank_span[0] <= start < rank_span[1]:
+            return True
+        window = text[max(0, start - 6):start]
+        return bool(re.search(_RANK_KEYWORDS + r"\s*$", window))
+
+    # ── score: a number attached to a score signal ("NN分" / "总分NN") ──
+    score: int | None = None
+    digits = r"(\d{3})" if exam_kind == "gaokao" else r"(\d{2,4})"
+    candidates: list[tuple[int, int]] = []
+    for sm in re.finditer(digits + r"\s*分", text):
+        candidates.append((sm.start(1), int(sm.group(1))))
+    for sm in re.finditer(_SCORE_KEYWORDS + r"\D{0,3}" + digits, text):
+        candidates.append((sm.start(1), int(sm.group(1))))
+    for pos, val in sorted(candidates):
+        if _claimed_by_rank(pos):
+            continue
+        if exam_kind == "gaokao" and not (500 <= val <= 750):
+            continue
+        score = val
+        break
+
+    # gaokao fallback: a standalone 3-digit number in 500–750, not a rank
+    if score is None and exam_kind == "gaokao":
+        for nm in re.finditer(r"\d{3}", text):
+            val = int(nm.group())
+            if not (500 <= val <= 750):
+                continue
+            if _claimed_by_rank(nm.start()):
+                continue
+            score = val
+            break
+
+    return {
+        "score": score,
+        "rank": rank,
+        "percentile": percentile,
+        "exam_kind": exam_kind,
+        "is_estimate": is_estimate,
+        "raw": text,
+    }
 
 
 def build_retrieval_query(profile: ApplicantProfile) -> str:
@@ -293,6 +404,8 @@ def build_report_prompt(profile: ApplicantProfile, sources: list[dict[str, Any]]
         for index, source in enumerate(sources, start=1)
     )
     score_context = extract_score_context(sources, profile.region)
+    parsed_score = parse_student_score(profile.score_summary, profile.exam_type)
+    parsed_block = json.dumps(parsed_score, ensure_ascii=False, indent=2)
     return f"""
 请基于"官方资料片段"和"学生画像"输出 JSON。
 
@@ -302,7 +415,13 @@ def build_report_prompt(profile: ApplicantProfile, sources: list[dict[str, Any]]
 3. 基于已有资料给学生最优判断。当某维度完全没有资料支撑时才说明缺什么；有部分资料时，基于已有信息给出定性分析，同时诚实标注信息缺口。
 4. fit_level 只能是：高度匹配、有条件匹配、风险较高、暂不建议、信息不足。
 5. key_evidence 必须说明依据来自哪些官方资料（引用编号 [N]）。
-6. academic_match：综合学生成绩、所在省份特征和下方"分数上下文摘要"给出定性判断。省份分数线存在时直接对比；分数线缺失但有全国统计数据时，用全国统计数据做参照。排名极高+英语远超平均就是实质性的积极信号——即使缺乏精确的全省排名换算，也不应判定为"信息不足"。
+6. academic_match — 同口径对比规则：下方"学生成绩结构化"已把学生输入解析为 {{score, rank, percentile}}；下方"分数上下文摘要"给出该省分数线 {{score, rank}}。按以下优先级对比，绝不在未声明的情况下拿位次对比分数：
+   - 学生有 rank 且该省分数线有 rank → 位次对位次直接对比（位次越小越好）。
+   - 学生有 score 且该省分数线有 score → 分数对分数对比。
+   - 学生只给 rank、该省分数线只有 score（或反之）→ 用该分数线自带的 (分数, 位次) 配对作锚点做定性判断，显式标注"基于锚点推断，非精确换算"，不要自行做除法/比例换算。
+   - 非高考（IB/A-Level/SAT/ACT/AP/DSE）→ 不与高考分数线对比，改用对应专业官方入学要求；无资料则如实说明。
+   - 预估分或前 N% 百分位 → 仅作方向性参考，标注"预估/百分位"。
+   只要有任一同口径或锚点可比数字就给出定性判断，不要判定"信息不足"；只有连最基本的定位参考都没有时才用"信息不足"。
 7. major_match：如果资料中有该专业信息，分析匹配度；没有则说明"官方资料中暂未收录该专业的详细要求"，不要编造。
 8. 每一项分析都要有内容，不要留空字段。
 9. fit_level 判定指引：
@@ -311,6 +430,9 @@ def build_report_prompt(profile: ApplicantProfile, sources: list[dict[str, Any]]
    - "风险较高"：成绩明显低于已知线，或有硬性条件不满足
    - "暂不建议"：多条硬性条件不满足
    - "信息不足"：**仅当**连最基本的定位参考（如所在省份分数线、可比省份数据、全国统计数据）都完全没有时才使用。只要有一条基准线可用于定位，就不应判定为信息不足。
+
+学生成绩结构化（系统解析，供同口径对比）：
+{parsed_block}
 
 分数上下文摘要：
 {score_context}

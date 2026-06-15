@@ -1,11 +1,20 @@
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
 
-from app.assessor import extract_score_context, normalize_report_data, soft_missing_labels, validate_profile
+from app.assessor import (
+    build_report_prompt,
+    extract_score_context,
+    normalize_report_data,
+    parse_student_score,
+    soft_missing_labels,
+    validate_profile,
+)
 from app.documents import Chunk, build_chunks, parse_front_matter, split_text
 from app.ingest import html_to_markdown, ingest_sources
 from app.models import ApplicantPath, ApplicantProfile, AssessRequest, AssessmentReport, FitLevel
@@ -119,8 +128,10 @@ class IngestFaultToleranceTests(unittest.TestCase):
                 raise RuntimeError("模拟网络错误")
             return "<html><body><h1>Good</h1><p>Content.</p></body></html>"
 
-        with patch("app.ingest.fetch_html", side_effect=fake_fetch):
-            result = ingest_sources(sources)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            with patch("app.ingest.fetch_html", side_effect=fake_fetch):
+                result = ingest_sources(sources, output_dir=tmp_path)
 
         self.assertEqual(len(result["ingested"]), 1)
         self.assertEqual(result["ingested"][0]["source_id"], "good")
@@ -139,8 +150,10 @@ class IngestFaultToleranceTests(unittest.TestCase):
         def fake_fetch(url: str, timeout: int = 30) -> str:
             raise RuntimeError("网络不可用")
 
-        with patch("app.ingest.fetch_html", side_effect=fake_fetch):
-            result = ingest_sources(sources)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            with patch("app.ingest.fetch_html", side_effect=fake_fetch):
+                result = ingest_sources(sources, output_dir=tmp_path)
 
         self.assertEqual(len(result["ingested"]), 0)
         self.assertEqual(len(result["failed"]), 2)
@@ -287,6 +300,100 @@ class AssessmentTests(unittest.TestCase):
         self.assertIn("天津", result)
         self.assertIn("652", result)
         self.assertIn("毗邻/同类省份参考", result)
+
+    def test_extract_score_context_labels_both_axes(self) -> None:
+        """When a province row has both score and rank, flag both axes present."""
+        sources = [
+            {
+                "title": "分数线",
+                "url": "https://example.com",
+                "text": "| 广东 | 物理类 | 666 | 1355 |",
+            }
+        ]
+        result = extract_score_context(sources, region="广东")
+        self.assertIn("两口径齐全", result)
+        self.assertIn("666", result)
+        self.assertIn("1355", result)
+
+    def test_extract_score_context_labels_missing_rank(self) -> None:
+        """When rank is a dash, flag it as 未公布 while keeping the score."""
+        sources = [
+            {
+                "title": "分数线",
+                "url": "https://example.com",
+                "text": "| 天津 | 综合改革 | 652 | - |",
+            }
+        ]
+        result = extract_score_context(sources, region="天津")
+        self.assertIn("未公布", result)
+        self.assertIn("652", result)
+
+    def test_extract_score_context_dedups_repeated_province_rows(self) -> None:
+        """The score table straddles chunk boundaries; repeated rows collapse to one."""
+        row = "| 黑龙江 | 物理类 | 621 | 3167 |"
+        sources = [
+            {"title": "分数线", "url": "https://example.com", "text": row},
+            {"title": "分数线", "url": "https://example.com", "text": row},
+        ]
+        result = extract_score_context(sources, region="黑龙江")
+        self.assertEqual(result.count("两口径齐全"), 1)
+
+    # ── parse_student_score tests ──
+
+    def test_parse_student_score_rank_only(self) -> None:
+        parsed = parse_student_score("省排名 2200")
+        self.assertEqual(parsed["rank"], 2200)
+        self.assertIsNone(parsed["score"])
+
+    def test_parse_student_score_score_only(self) -> None:
+        parsed = parse_student_score("652分")
+        self.assertEqual(parsed["score"], 652)
+        self.assertIsNone(parsed["rank"])
+
+    def test_parse_student_score_both_axes(self) -> None:
+        parsed = parse_student_score("总分660 省排1500")
+        self.assertEqual(parsed["score"], 660)
+        self.assertEqual(parsed["rank"], 1500)
+
+    def test_parse_student_score_foreign_exam(self) -> None:
+        parsed = parse_student_score("42分", exam_type="IB")
+        self.assertEqual(parsed["exam_kind"], "ib")
+
+    def test_parse_student_score_estimate_flag(self) -> None:
+        parsed = parse_student_score("预估 660")
+        self.assertTrue(parsed["is_estimate"])
+
+    def test_parse_student_score_percentile(self) -> None:
+        parsed = parse_student_score("前2%")
+        self.assertEqual(parsed["percentile"], "前2%")
+        self.assertIsNone(parsed["rank"])
+
+    def test_parse_student_score_rank_not_mistaken_for_score(self) -> None:
+        """A 4-digit rank like 1355 must not be read as a gaokao score."""
+        parsed = parse_student_score("位次 1355")
+        self.assertEqual(parsed["rank"], 1355)
+        self.assertIsNone(parsed["score"])
+
+    # ── build_report_prompt tests ──
+
+    def test_build_report_prompt_contains_same_axis_guidance(self) -> None:
+        """The rendered prompt must carry the parsed block and same-axis rules."""
+        profile = self.complete_profile()
+        profile.score_summary = "省排名 1500"
+        sources = [
+            {
+                "title": "分数线",
+                "url": "https://example.com",
+                "text": "| 广东 | 物理类 | 666 | 1355 |",
+            }
+        ]
+        prompt = build_report_prompt(profile, sources)
+        self.assertIn("学生成绩结构化", prompt)
+        self.assertIn("同口径", prompt)
+        self.assertIn("锚点", prompt)
+        self.assertIn("不要自行做", prompt)
+        # the parsed rank should appear in the structured block
+        self.assertIn("1500", prompt)
 
 
 if __name__ == "__main__":
