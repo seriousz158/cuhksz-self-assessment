@@ -299,7 +299,7 @@ class AssessmentTests(unittest.TestCase):
         result = extract_score_context(sources, region="天津")
         self.assertIn("天津", result)
         self.assertIn("652", result)
-        self.assertIn("毗邻/同类省份参考", result)
+        self.assertIn("同梯队省份参考", result)
 
     def test_extract_score_context_labels_both_axes(self) -> None:
         """When a province row has both score and rank, flag both axes present."""

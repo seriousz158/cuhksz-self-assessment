@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ApplicantPath(str, Enum):
@@ -33,7 +33,8 @@ class ApplicantProfile(BaseModel):
     adaptability: str = Field("", description="英文教学、深圳生活、独立学习等适应能力")
     constraints: str = Field("", description="必须满足的限制或担忧")
 
-    @validator("*", pre=True)
+    @field_validator("*", mode="before")
+    @classmethod
     def strip_strings(cls, value: Any) -> Any:
         if isinstance(value, str):
             return value.strip()
@@ -76,8 +77,7 @@ class AssessResponse(BaseModel):
 
 
 class StatusResponse(BaseModel):
-    class Config:
-        protected_namespaces = ()
+    model_config = ConfigDict(protected_namespaces=())
 
     documents: int
     chunks: int

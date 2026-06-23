@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -33,6 +34,17 @@ def load_index_from_disk() -> None:
     retriever = HybridRetriever(vector_index) if vector_index else None
 
 
+@functools.lru_cache(maxsize=1)
+def cached_documents():
+    """Parse the knowledge base once and memoise it.
+
+    The parsed Markdown never changes between ingests, so /api/status and index
+    rebuilds can reuse the result instead of re-reading every file each call.
+    `ingest_sources()` writes new files, so callers must `cache_clear()` after it.
+    """
+    return load_documents()
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     load_index_from_disk()
@@ -44,7 +56,7 @@ app = FastAPI(title="CUHK-Shenzhen Undergraduate Self-Assessment KB", lifespan=l
 
 def rebuild_index() -> dict[str, int]:
     global vector_index, retriever
-    documents = load_documents()
+    documents = cached_documents()
     chunks = build_chunks(documents, chunk_size=settings.chunk_size, chunk_overlap=settings.chunk_overlap)
     texts = [chunk.text for chunk in chunks]
     embeddings = ollama_embed(
@@ -66,7 +78,7 @@ def index() -> FileResponse:
 
 @app.get("/api/status", response_model=StatusResponse)
 def status() -> StatusResponse:
-    documents = load_documents()
+    documents = cached_documents()
     return StatusResponse(
         documents=len(documents),
         chunks=len(vector_index.chunks) if vector_index else 0,
@@ -80,6 +92,8 @@ def status() -> StatusResponse:
 @app.post("/api/ingest")
 def ingest() -> dict[str, object]:
     result = ingest_sources()
+    # Source files on disk may have changed — drop the memoised parse.
+    cached_documents.cache_clear()
     ingested = result["ingested"]
     failed = result["failed"]
     return {
@@ -105,29 +119,33 @@ def assess(request: AssessRequest) -> AssessResponse:
         raise HTTPException(status_code=400, detail="知识库索引还没有准备好。请先运行 /api/ingest，再运行 /api/rebuild。")
 
     profile = request.profile
-    query = build_retrieval_query(profile)
-    try:
-        query_vector = ollama_embed(
-            [query],
-            base_url=settings.ollama_base_url,
-            model=settings.embedding_model,
-            timeout=settings.request_timeout,
-        )[0]
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-    raw_results = retriever.search(query, query_vector, top_k=settings.retrieval_top_k)
-    sources = [result_to_source(result) for result in raw_results]
     hard_missing = validate_profile(profile)
     soft_missing = soft_missing_labels(profile)
 
     if hard_missing:
-        response = insufficient_response(profile, hard_missing, sources)
+        # Critical fields are missing — there's nothing useful to retrieve or
+        # send to the LLM yet. Return early so we don't pay an Ollama embedding
+        # round-trip plus a full retrieval for an unusable request.
+        response = insufficient_response(profile, hard_missing, [])
     else:
+        query = build_retrieval_query(profile)
+        try:
+            query_vector = ollama_embed(
+                [query],
+                base_url=settings.ollama_base_url,
+                model=settings.embedding_model,
+                timeout=settings.request_timeout,
+            )[0]
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+        raw_results = retriever.search(query, query_vector, top_k=settings.retrieval_top_k)
+        sources = [result_to_source(result) for result in raw_results]
+
         try:
             report = call_llm_for_report(profile, sources, settings)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
         response = AssessResponse(status="ok", report=report, missing_fields=soft_missing)
 
     if request.save_history:

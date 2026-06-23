@@ -194,7 +194,7 @@ def extract_score_context(sources: list[dict[str, Any]], region: str) -> str:
             )
         if neighbour_lines:
             fallback_lines.append(
-                "- **毗邻省份数据**（可用于大致参照，注意省份间高考难度和分数线差异）："
+                "- **同梯队省份数据**（可用于大致参照，注意省份间高考难度和分数线差异）："
             )
         parts.append("\n".join(fallback_lines))
 
@@ -203,7 +203,7 @@ def extract_score_context(sources: list[dict[str, Any]], region: str) -> str:
     if english_stats:
         parts.append("**英语成绩参考**：\n" + "\n".join(english_stats))
     if neighbour_lines:
-        parts.append("**毗邻/同类省份参考**：\n" + "\n".join(neighbour_lines))
+        parts.append("**同梯队省份参考**：\n" + "\n".join(neighbour_lines))
 
     if not parts:
         return "（未从资料中提取到可量化的分数上下文，请完全依赖下方的原始资料片段。）"
@@ -508,6 +508,4 @@ def history_record(profile: ApplicantProfile, response: AssessResponse) -> dict[
 
 
 def _model_dump(model: Any) -> dict[str, Any]:
-    if hasattr(model, "model_dump"):
-        return model.model_dump()
-    return model.dict()
+    return model.model_dump()
