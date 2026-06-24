@@ -23,20 +23,27 @@ class VectorIndex:
             raise ValueError("vectors must be a 2D array")
         if len(vectors) != len(chunks):
             raise ValueError("vector count must match chunk count")
-        self.vectors = vectors.astype("float32")
+        # Row-wise L2 normalisation so cosine similarity reduces to a dot
+        # product (the standard metric for bge-m3). Guard zero vectors so we
+        # never divide by zero — a NaN here would silently corrupt argsort.
+        row_norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+        row_norms[row_norms == 0] = 1e-12
+        self.vectors = (vectors / row_norms).astype("float32")
         self.chunks = chunks
 
     def search(self, query_vector: list[float], top_k: int = 10) -> list[dict[str, object]]:
         if not self.chunks:
             return []
         query = np.array(query_vector, dtype="float32")
-        distances = np.linalg.norm(self.vectors - query, axis=1)
-        order = np.argsort(distances)[:top_k]
+        query_norm = float(np.linalg.norm(query)) or 1e-12
+        query = query / query_norm
+        similarities = self.vectors @ query
+        order = np.argsort(similarities)[::-1][:top_k]
         return [
             {
                 "rank": rank + 1,
-                "score": float(1 / (1 + distances[index])),
-                "distance": float(distances[index]),
+                "score": float(similarities[index]),
+                "distance": float(1 - similarities[index]),
                 "chunk": self.chunks[int(index)],
             }
             for rank, index in enumerate(order)

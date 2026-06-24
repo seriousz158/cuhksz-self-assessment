@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -109,6 +110,17 @@ class RetrievalTests(unittest.TestCase):
         self.assertIn("title", source)
         self.assertIn("text", source)
 
+    def test_vector_search_uses_cosine_similarity(self) -> None:
+        """L2 and cosine disagree on these vectors; cosine (the active metric)
+        must rank B first. query=[1,0]: docA=[1,0.5] is L2-nearer (distance
+        0.5) but docB=[3,0] is parallel to the query (cosine 1.0)."""
+        chunk_a = self.make_chunk(0, "doc a")
+        chunk_b = self.make_chunk(1, "doc b")
+        index = VectorIndex(np.array([[1.0, 0.5], [3.0, 0.0]], dtype="float32"), [chunk_a, chunk_b])
+        results = index.search([1.0, 0.0], top_k=2)
+        self.assertEqual(results[0]["chunk"].chunk_id, 1)  # B ranks first under cosine
+        self.assertGreater(results[0]["score"], results[1]["score"])
+
 
 class IngestFaultToleranceTests(unittest.TestCase):
     def make_source(self, source_id: str, url: str = "https://example.com") -> OfficialSource:
@@ -204,7 +216,7 @@ class AssessmentTests(unittest.TestCase):
 
     def test_normalize_report_data_guards_bad_level(self) -> None:
         data = normalize_report_data({"fit_level": "录取概率90%", "conclusion": "测试"})
-        self.assertEqual(data["fit_level"], FitLevel.conditional_fit.value)
+        self.assertEqual(data["fit_level"], FitLevel.insufficient_data.value)
 
     def test_assess_endpoint_logic_with_mock_llm(self) -> None:
         import app.main as main
@@ -394,6 +406,47 @@ class AssessmentTests(unittest.TestCase):
         self.assertIn("不要自行做", prompt)
         # the parsed rank should appear in the structured block
         self.assertIn("1500", prompt)
+
+
+class EmbeddingTests(unittest.TestCase):
+    def test_ollama_embed_batches_large_input(self) -> None:
+        """70 texts with batch_size=32 must issue exactly 3 requests whose
+        embeddings are concatenated in input order."""
+
+        class _FakeResponse:
+            def __init__(self, payload: dict) -> None:
+                self._payload = payload
+
+            def read(self) -> bytes:
+                return json.dumps(self._payload).encode("utf-8")
+
+            def __enter__(self) -> "_FakeResponse":
+                return self
+
+            def __exit__(self, *args: object) -> bool:
+                return False
+
+        import app.embeddings as embeddings
+
+        texts = [f"t{i}" for i in range(70)]
+        batch_sizes: list[int] = []
+
+        def fake_urlopen(request, timeout):
+            body = json.loads(request.data.decode("utf-8"))
+            idxs = [int(text[1:]) for text in body["input"]]
+            batch_sizes.append(len(idxs))
+            return _FakeResponse({"embeddings": [[float(i), float(i)] for i in idxs]})
+
+        with patch("app.embeddings.urllib.request.urlopen", side_effect=fake_urlopen):
+            result = embeddings.ollama_embed(texts, batch_size=32)
+
+        self.assertEqual(batch_sizes, [32, 32, 6])  # exactly 3 requests
+        self.assertEqual(len(result), 70)
+        # order preserved across the batch boundary
+        self.assertEqual(result[0], [0.0, 0.0])
+        self.assertEqual(result[31], [31.0, 31.0])
+        self.assertEqual(result[32], [32.0, 32.0])
+        self.assertEqual(result[69], [69.0, 69.0])
 
 
 if __name__ == "__main__":

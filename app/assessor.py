@@ -368,7 +368,11 @@ def call_llm_for_report(
             "If you use a compatible provider, also set OPENAI_BASE_URL."
         )
 
-    client = OpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url)
+    client = OpenAI(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_base_url,
+        timeout=settings.request_timeout,
+    )
     prompt = build_report_prompt(profile, sources)
     response = client.chat.completions.create(
         model=settings.model_name,
@@ -390,6 +394,7 @@ def call_llm_for_report(
             {"role": "user", "content": prompt},
         ],
         temperature=0.2,
+        timeout=settings.request_timeout,
     )
     content = response.choices[0].message.content or ""
     data = parse_json_object(content)
@@ -476,7 +481,7 @@ def normalize_report_data(data: dict[str, Any]) -> dict[str, Any]:
     fit_level = str(data.get("fit_level", "")).strip()
     allowed = {item.value for item in FitLevel}
     if fit_level not in allowed:
-        fit_level = FitLevel.conditional_fit.value
+        fit_level = FitLevel.insufficient_data.value
 
     return {
         "fit_level": fit_level,
